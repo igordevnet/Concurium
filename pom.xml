@@ -20,6 +20,11 @@
             <artifactId>tomcat-embed-core</artifactId>
             <version>11.0.24</version>
         </dependency>
+        <dependency>
+            <groupId>org.reflections</groupId>
+            <artifactId>reflections</artifactId>
+            <version>0.10.2</version>
+        </dependency>
     </dependencies>
 
 </project>
