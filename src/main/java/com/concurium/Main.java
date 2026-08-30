@@ -13,7 +13,6 @@ import java.lang.reflect.Method;
 
 public class Main {
 
-    private static final int serverPort = 8080;
 
     public static void main(String[] args) throws LifecycleException {
 //        Tomcat tomcatServer = new Tomcat();

@@ -1,18 +1,21 @@
 package com.concurium.bootstrap;
 
 import com.concurium.annotations.*;
+import com.concurium.server.ConcServlet;
+import com.concurium.server.RouteTarget;
+import org.apache.catalina.Context;
+import org.apache.catalina.Wrapper;
+import org.apache.catalina.startup.Tomcat;
 import org.reflections.Reflections;
 
+import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class ConcuriumApplication {
 
-    public record RouteTarget(Object controllerInstance, Method method) {}
+    private static final int serverPort = 8080;
 
     private static final List<Class<? extends Annotation>> HTTP_VERBS = List.of(
             Get.class, Post.class, Put.class, Delete.class, Patch.class, Query.class
@@ -23,6 +26,23 @@ public class ConcuriumApplication {
         var reflection = new Reflections(appPackage);
 
         var routes = httpScanner(appPackage, reflection);
+
+        Tomcat tomcatServer = new Tomcat();
+
+        tomcatServer.setPort(serverPort);
+        tomcatServer.getConnector();
+        tomcatServer.setBaseDir(new File(".").getAbsolutePath());
+
+        var context = tomcatServer.addContext("", new File(".").getAbsolutePath());
+        Wrapper concServlet = tomcatServer.addServlet(context, "ConcServlet", new ConcServlet(routes));
+        context.addServletMappingDecoded("/*", "ConcServlet");
+
+        try {
+            tomcatServer.start();
+            tomcatServer.getServer().await();
+        } catch (Exception e) {
+            throw new RuntimeException("Tomcat failed to start", e);
+        }
     }
 
     private static Map<String, RouteTarget> httpScanner(String appPackage, Reflections reflection) {
