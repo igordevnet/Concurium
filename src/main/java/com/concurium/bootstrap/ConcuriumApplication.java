@@ -1,9 +1,9 @@
 package com.concurium.bootstrap;
 
 import com.concurium.annotations.*;
+import com.concurium.context.ApplicationContext;
 import com.concurium.server.ConcServlet;
 import com.concurium.server.RouteTarget;
-import org.apache.catalina.Context;
 import org.apache.catalina.Wrapper;
 import org.apache.catalina.startup.Tomcat;
 import org.reflections.Reflections;
@@ -21,14 +21,22 @@ public class ConcuriumApplication {
             Get.class, Post.class, Put.class, Delete.class, Patch.class, Query.class
     );
 
+    private static final List<Class<? extends Annotation>> CLASS_ANNOTATIONS = List.of(
+            Service.class, Repository.class, Component.class, Controller.class
+    );
+
     public static void run(Class<?> mainClass) {
         String appPackage = mainClass.getPackageName();
         var reflection = new Reflections(appPackage);
 
-        var routes = httpScanner(appPackage, reflection);
+        Set<Class<?>> managedClasses = discoverManagedClasses(reflection);
+
+        ApplicationContext applicationContext = new ApplicationContext();
+        applicationContext.initialize(managedClasses);
+
+        var routes = httpScanner(applicationContext, reflection);
 
         Tomcat tomcatServer = new Tomcat();
-
         tomcatServer.setPort(serverPort);
         tomcatServer.getConnector();
         tomcatServer.setBaseDir(new File(".").getAbsolutePath());
@@ -45,14 +53,14 @@ public class ConcuriumApplication {
         }
     }
 
-    private static Map<String, RouteTarget> httpScanner(String appPackage, Reflections reflection) {
+    private static Map<String, RouteTarget> httpScanner(ApplicationContext applicationContext, Reflections reflection) {
         Set<Class<?>> controllerClasses = reflection.getTypesAnnotatedWith(Controller.class);
-
         Map<String, RouteTarget> routeRegistry = new HashMap<>();
 
         for (Class<?> clazz : controllerClasses) {
             try {
-                Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
+                Object controllerInstance = applicationContext.getBean(clazz);
+
                 Controller controllerAnnotation = clazz.getAnnotation(Controller.class);
                 String basePath = controllerAnnotation.value();
 
@@ -62,10 +70,7 @@ public class ConcuriumApplication {
                             Annotation annotation = method.getAnnotation(verbClass);
                             String methodPath = (String) verbClass.getMethod("value").invoke(annotation);
 
-                            String fullPath = basePath + methodPath;
-
-                            fullPath = fullPath.replaceAll("//+", "/");
-
+                            String fullPath = (basePath + methodPath).replaceAll("//+", "/");
                             String httpMethod = verbClass.getSimpleName().toUpperCase();
                             String routeKey = httpMethod + " " + fullPath;
 
@@ -74,7 +79,7 @@ public class ConcuriumApplication {
                     }
                 }
             } catch (Exception e) {
-                throw new RuntimeException("Failed to initialize controllers", e);
+                throw new RuntimeException("Failed to initialize route for controller: " + clazz.getName(), e);
             }
         }
 
@@ -83,5 +88,13 @@ public class ConcuriumApplication {
         );
 
         return routeRegistry;
+    }
+
+    private static Set<Class<?>> discoverManagedClasses(Reflections reflection) {
+        Set<Class<?>> managedClasses = new HashSet<>();
+        for (Class<? extends Annotation> annotation : CLASS_ANNOTATIONS) {
+            managedClasses.addAll(reflection.getTypesAnnotatedWith(annotation));
+        }
+        return managedClasses;
     }
 }
