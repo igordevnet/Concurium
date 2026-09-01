@@ -30,6 +30,10 @@ public class ApplicationContext {
         if (singletonObjects.containsKey(clazz)) return singletonObjects.get(clazz);
         if (inProgress.contains(clazz)) throw new RuntimeException("Circular dependency: " + clazz.getName());
 
+        if (!registeredClasses.contains(clazz)) {
+            throw new RuntimeException("Dependency injection failed: [" + clazz.getName() + "] is not a managed bean.");
+        }
+
         inProgress.add(clazz);
 
         var constructor = clazz.getDeclaredConstructors()[0];
