@@ -1,4 +1,5 @@
-import com.concurium.annotations.*;
+import com.concurium.annotations.bean.Controller;
+import com.concurium.annotations.http.*;
 
 @Controller("/api/users")
 public class UserController {

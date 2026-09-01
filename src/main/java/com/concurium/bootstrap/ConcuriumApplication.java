@@ -1,9 +1,13 @@
 package com.concurium.bootstrap;
 
-import com.concurium.annotations.*;
+import com.concurium.annotations.bean.Component;
+import com.concurium.annotations.bean.Controller;
+import com.concurium.annotations.bean.Repository;
+import com.concurium.annotations.bean.Service;
+import com.concurium.annotations.http.*;
 import com.concurium.context.ApplicationContext;
 import com.concurium.server.ConcServlet;
-import com.concurium.server.RouteTarget;
+import com.concurium.server.RouteDefinition;
 import org.apache.catalina.Wrapper;
 import org.apache.catalina.startup.Tomcat;
 import org.reflections.Reflections;
@@ -12,6 +16,7 @@ import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.regex.Pattern;
 
 public class ConcuriumApplication {
 
@@ -53,9 +58,9 @@ public class ConcuriumApplication {
         }
     }
 
-    private static Map<String, RouteTarget> httpScanner(ApplicationContext applicationContext, Reflections reflection) {
+    private static List<RouteDefinition> httpScanner(ApplicationContext applicationContext, Reflections reflection) {
         Set<Class<?>> controllerClasses = reflection.getTypesAnnotatedWith(Controller.class);
-        Map<String, RouteTarget> routeRegistry = new HashMap<>();
+        List<RouteDefinition> routeRegistry = new ArrayList<>();
 
         for (Class<?> clazz : controllerClasses) {
             try {
@@ -72,20 +77,18 @@ public class ConcuriumApplication {
 
                             String fullPath = (basePath + methodPath).replaceAll("//+", "/");
                             String httpMethod = verbClass.getSimpleName().toUpperCase();
-                            String routeKey = httpMethod + " " + fullPath;
 
-                            routeRegistry.put(routeKey, new RouteTarget(controllerInstance, method));
-                        }
+                            String regexPath = fullPath.replaceAll("\\{([^/]+)\\}", "(?<$1>[^/]+)");
+
+                            Pattern routePattern = Pattern.compile("^" + httpMethod + " " + regexPath + "$");
+
+                            routeRegistry.add(new RouteDefinition(routePattern, controllerInstance, method));                        }
                     }
                 }
             } catch (Exception e) {
                 throw new RuntimeException("Failed to initialize route for controller: " + clazz.getName(), e);
             }
         }
-
-        routeRegistry.forEach((key, target) ->
-                System.out.println("Mapped: " + key + " -> " + target.controllerInstance().getClass().getSimpleName() + "." + target.method().getName())
-        );
 
         return routeRegistry;
     }
