@@ -5,6 +5,7 @@ import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.auth0.jwt.interfaces.JWTVerifier;
 import com.concurium.annotations.security.RequireAuth;
+import com.concurium.annotations.security.SecurityBean;
 import com.concurium.annotations.security.SkipAuth;
 import com.concurium.server.RouteDefinition;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,6 +13,7 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import java.lang.reflect.Method;
 
+@SecurityBean
 public class SecurityInterceptor implements HandlerInterceptor {
 
     private final JwtConfiguration jwtConfig;

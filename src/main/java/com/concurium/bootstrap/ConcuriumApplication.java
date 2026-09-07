@@ -5,7 +5,7 @@ import com.concurium.annotations.bean.Controller;
 import com.concurium.annotations.bean.Repository;
 import com.concurium.annotations.bean.Service;
 import com.concurium.annotations.http.*;
-import com.concurium.annotations.security.SecurityConfig;
+import com.concurium.annotations.security.SecurityBean;
 import com.concurium.context.ApplicationContext;
 import com.concurium.middleware.HandlerInterceptor;
 import com.concurium.server.ConcServlet;
@@ -29,7 +29,7 @@ public class ConcuriumApplication {
     );
 
     private static final List<Class<? extends Annotation>> CLASS_ANNOTATIONS = List.of(
-            Service.class, Repository.class, Component.class, Controller.class, SecurityConfig.class
+            Service.class, Repository.class, Component.class, Controller.class, SecurityBean.class
     );
 
     public static void run(Class<?> mainClass) {
