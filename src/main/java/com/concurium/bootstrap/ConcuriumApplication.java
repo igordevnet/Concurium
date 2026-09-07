@@ -13,6 +13,9 @@ import com.concurium.server.RouteDefinition;
 import org.apache.catalina.Wrapper;
 import org.apache.catalina.startup.Tomcat;
 import org.reflections.Reflections;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.bridge.SLF4JBridgeHandler;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
@@ -24,6 +27,8 @@ public class ConcuriumApplication {
 
     private static final int serverPort = 8080;
 
+    private static final Logger log = LoggerFactory.getLogger(ConcuriumApplication.class);
+
     private static final List<Class<? extends Annotation>> HTTP_VERBS = List.of(
             Get.class, Post.class, Put.class, Delete.class, Patch.class, Query.class
     );
@@ -33,6 +38,12 @@ public class ConcuriumApplication {
     );
 
     public static void run(Class<?> mainClass) {
+        SLF4JBridgeHandler.removeHandlersForRootLogger();
+        SLF4JBridgeHandler.install();
+
+        log.info("Starting Concurium Framework...");
+        long startTime = System.currentTimeMillis();
+
         String appPackage = mainClass.getPackageName();
         var reflection = new Reflections(appPackage);
 
@@ -52,6 +63,8 @@ public class ConcuriumApplication {
         var context = tomcatServer.addContext("", new File(".").getAbsolutePath());
         Wrapper concServlet = tomcatServer.addServlet(context, "ConcServlet", new ConcServlet(routes, filterChain));
         context.addServletMappingDecoded("/*", "ConcServlet");
+        log.info("Loaded {} routes into the registry", routes.size());
+        log.info("Tomcat started on port 8080 in {} ms", (System.currentTimeMillis() - startTime));
 
         try {
             tomcatServer.start();
