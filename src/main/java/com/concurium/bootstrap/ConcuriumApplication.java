@@ -6,9 +6,12 @@ import com.concurium.annotations.bean.Repository;
 import com.concurium.annotations.bean.Service;
 import com.concurium.annotations.http.*;
 import com.concurium.annotations.security.SecurityBean;
+import com.concurium.annotations.web.ExceptionHandler;
+import com.concurium.annotations.web.GlobalExceptionHandler;
 import com.concurium.context.ApplicationContext;
 import com.concurium.middleware.HandlerInterceptor;
 import com.concurium.server.ConcServlet;
+import com.concurium.server.ExceptionHandlerDefinition;
 import com.concurium.server.RouteDefinition;
 import org.apache.catalina.Wrapper;
 import org.apache.catalina.startup.Tomcat;
@@ -34,7 +37,7 @@ public class ConcuriumApplication {
     );
 
     private static final List<Class<? extends Annotation>> CLASS_ANNOTATIONS = List.of(
-            Service.class, Repository.class, Component.class, Controller.class, SecurityBean.class
+            Service.class, Repository.class, Component.class, Controller.class, SecurityBean.class, GlobalExceptionHandler.class
     );
 
     public static void run(Class<?> mainClass) {
@@ -98,7 +101,8 @@ public class ConcuriumApplication {
 
                             Pattern routePattern = Pattern.compile("^" + httpMethod + " " + regexPath + "$");
 
-                            routeRegistry.add(new RouteDefinition(routePattern, controllerInstance, method));                        }
+                            routeRegistry.add(new RouteDefinition(routePattern, controllerInstance, method));
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -114,16 +118,43 @@ public class ConcuriumApplication {
         List<HandlerInterceptor> filterObjects = new ArrayList<>();
 
         try {
-            for(var interceptor : filterClasses) {
-                if(!interceptor.isInterface()) {
+            for (var interceptor : filterClasses) {
+                if (!interceptor.isInterface()) {
                     HandlerInterceptor instance = context.getBean(interceptor);
                     filterObjects.add(instance);
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load middleware chain", e);        }
+            throw new RuntimeException("Failed to load middleware chain", e);
+        }
 
         return filterObjects;
+    }
+
+    private static Map<Class<? extends Throwable>, ExceptionHandlerDefinition> loadExceptionHandlers(
+            ApplicationContext context,
+            Reflections reflection
+    ) {
+        Map<Class<? extends Throwable>, ExceptionHandlerDefinition> exceptionRegistry = new HashMap<>();
+
+        Set<Class<?>> errorClasses = reflection.getTypesAnnotatedWith(GlobalExceptionHandler.class);
+
+        for (Class<?> clazz : errorClasses) {
+            Object handlerInstance = context.getBean(clazz);
+
+            for (Method method : clazz.getDeclaredMethods()) {
+                if (method.isAnnotationPresent(ExceptionHandler.class)) {
+                    ExceptionHandler annotation = method.getAnnotation(ExceptionHandler.class);
+                    Class<? extends Throwable> targetException = annotation.value();
+
+                    exceptionRegistry.put(targetException, new ExceptionHandlerDefinition(handlerInstance, method));
+
+                    log.info("Mapped exception {} to {}.{}", targetException.getSimpleName(), clazz.getSimpleName(), method.getName());
+                }
+            }
+        }
+
+        return exceptionRegistry;
     }
 
     private static Set<Class<?>> discoverManagedClasses(Reflections reflection) {
