@@ -5,7 +5,9 @@ import com.concurium.annotations.bean.Controller;
 import com.concurium.annotations.bean.Repository;
 import com.concurium.annotations.bean.Service;
 import com.concurium.annotations.http.*;
+import com.concurium.annotations.security.SecurityBean;
 import com.concurium.context.ApplicationContext;
+import com.concurium.middleware.HandlerInterceptor;
 import com.concurium.server.ConcServlet;
 import com.concurium.server.RouteDefinition;
 import org.apache.catalina.Wrapper;
@@ -27,7 +29,7 @@ public class ConcuriumApplication {
     );
 
     private static final List<Class<? extends Annotation>> CLASS_ANNOTATIONS = List.of(
-            Service.class, Repository.class, Component.class, Controller.class
+            Service.class, Repository.class, Component.class, Controller.class, SecurityBean.class
     );
 
     public static void run(Class<?> mainClass) {
@@ -40,6 +42,7 @@ public class ConcuriumApplication {
         applicationContext.initialize(managedClasses);
 
         var routes = httpScanner(applicationContext, reflection);
+        var filterChain = loadFilterChain(applicationContext, reflection);
 
         Tomcat tomcatServer = new Tomcat();
         tomcatServer.setPort(serverPort);
@@ -47,7 +50,7 @@ public class ConcuriumApplication {
         tomcatServer.setBaseDir(new File(".").getAbsolutePath());
 
         var context = tomcatServer.addContext("", new File(".").getAbsolutePath());
-        Wrapper concServlet = tomcatServer.addServlet(context, "ConcServlet", new ConcServlet(routes));
+        Wrapper concServlet = tomcatServer.addServlet(context, "ConcServlet", new ConcServlet(routes, filterChain));
         context.addServletMappingDecoded("/*", "ConcServlet");
 
         try {
@@ -91,6 +94,23 @@ public class ConcuriumApplication {
         }
 
         return routeRegistry;
+    }
+
+    private static List<HandlerInterceptor> loadFilterChain(ApplicationContext context, Reflections reflection) {
+        Set<Class<? extends HandlerInterceptor>> filterClasses = reflection.getSubTypesOf(HandlerInterceptor.class);
+        List<HandlerInterceptor> filterObjects = new ArrayList<>();
+
+        try {
+            for(var interceptor : filterClasses) {
+                if(!interceptor.isInterface()) {
+                    HandlerInterceptor instance = context.getBean(interceptor);
+                    filterObjects.add(instance);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load middleware chain", e);        }
+
+        return filterObjects;
     }
 
     private static Set<Class<?>> discoverManagedClasses(Reflections reflection) {

@@ -3,6 +3,7 @@ package com.concurium.server;
 import com.concurium.annotations.http.binding.PathVariable;
 import com.concurium.annotations.http.binding.RequestBody;
 import com.concurium.annotations.http.binding.RequestParam;
+import com.concurium.middleware.HandlerInterceptor;
 import com.concurium.utils.ResponseEntity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
@@ -12,17 +13,17 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class ConcServlet extends HttpServlet {
 
     private final List<RouteDefinition> httpRoutes;
+    private final List<HandlerInterceptor> filterChain;
     private final ObjectMapper objectMapper;
 
-    public ConcServlet(List<RouteDefinition> httpRoutes) {
+    public ConcServlet(List<RouteDefinition> httpRoutes, List<HandlerInterceptor> filterChain) {
         this.httpRoutes = httpRoutes;
+        this.filterChain = filterChain;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -46,6 +47,13 @@ public class ConcServlet extends HttpServlet {
 
         if (targetRoute != null) {
             try {
+
+                for(HandlerInterceptor interceptor : filterChain) {
+                    if (!interceptor.preHandle(req, resp, targetRoute)) {
+                        return;
+                    }
+                }
+
                 var parameters = targetRoute.method().getParameters();
                 Object[] args = new Object[parameters.length];
 
@@ -74,6 +82,12 @@ public class ConcServlet extends HttpServlet {
                     else if (param.isAnnotationPresent(RequestBody.class)) {
                         args[i] = objectMapper.readValue(req.getInputStream(), paramType);
                     }
+                    else if (paramType.equals(HttpServletRequest.class)) {
+                        args[i] = req;
+                    }
+                    else if (paramType.equals(HttpServletResponse.class)) {
+                        args[i] = resp;
+                    }
                 }
 
                 Object result = targetRoute.method().invoke(targetRoute.controllerInstance(), args);
@@ -98,7 +112,7 @@ public class ConcServlet extends HttpServlet {
 
             } catch (Exception e) {
                 resp.setStatus(500);
-                resp.getWriter().print("Internal Server Error");
+                resp.getWriter().print("Internal Server Error " + e);
             }
 
         } else{
