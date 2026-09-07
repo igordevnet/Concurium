@@ -82,6 +82,12 @@ public class ConcServlet extends HttpServlet {
                     else if (param.isAnnotationPresent(RequestBody.class)) {
                         args[i] = objectMapper.readValue(req.getInputStream(), paramType);
                     }
+                    else if (paramType.equals(HttpServletRequest.class)) {
+                        args[i] = req;
+                    }
+                    else if (paramType.equals(HttpServletResponse.class)) {
+                        args[i] = resp;
+                    }
                 }
 
                 Object result = targetRoute.method().invoke(targetRoute.controllerInstance(), args);
@@ -106,7 +112,7 @@ public class ConcServlet extends HttpServlet {
 
             } catch (Exception e) {
                 resp.setStatus(500);
-                resp.getWriter().print("Internal Server Error");
+                resp.getWriter().print("Internal Server Error " + e);
             }
 
         } else{
