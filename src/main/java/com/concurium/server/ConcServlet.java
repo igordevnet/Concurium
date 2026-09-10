@@ -6,25 +6,37 @@ import com.concurium.annotations.http.binding.RequestParam;
 import com.concurium.middleware.HandlerInterceptor;
 import com.concurium.utils.ResponseEntity;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 
 public class ConcServlet extends HttpServlet {
 
     private final List<RouteDefinition> httpRoutes;
     private final List<HandlerInterceptor> filterChain;
+    private final Map<Class<? extends Throwable>, ExceptionHandlerDefinition> exceptionRegistry;
     private final ObjectMapper objectMapper;
 
-    public ConcServlet(List<RouteDefinition> httpRoutes, List<HandlerInterceptor> filterChain) {
+    public ConcServlet(
+            List<RouteDefinition> httpRoutes,
+            List<HandlerInterceptor> filterChain,
+            Map<Class<? extends Throwable>, ExceptionHandlerDefinition> exceptionRegistry
+    ) {
         this.httpRoutes = httpRoutes;
         this.filterChain = filterChain;
+        this.exceptionRegistry= exceptionRegistry;
         this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     @Override
@@ -111,8 +123,40 @@ public class ConcServlet extends HttpServlet {
                 }
 
             } catch (Exception e) {
+                Throwable realCrash = (e instanceof InvocationTargetException)
+                        ? e.getCause()
+                        : e;
+
+                Class<? extends Throwable> crashClass = realCrash.getClass();
+
+                if (exceptionRegistry.containsKey(crashClass)) {
+                    try {
+                        ExceptionHandlerDefinition handlerDef = exceptionRegistry.get(crashClass);
+
+                        Object result = handlerDef.method().invoke(handlerDef.instance(), realCrash, req);
+
+                        if (result instanceof ResponseEntity<?> responseEntity) {
+                            resp.setStatus(responseEntity.getStatus());
+                            resp.setContentType("application/json");
+                            responseEntity.getHeaders().forEach(resp::setHeader);
+
+                            if (responseEntity.getBody() != null) {
+                                resp.getWriter().print(objectMapper.writeValueAsString(responseEntity.getBody()));
+                            }
+                            return;
+                        }
+                    } catch (Exception handlerCrash) {
+                        System.err.println("CRITICAL: The custom @ExceptionHandler threw an exception!");
+                        handlerCrash.printStackTrace();
+                    }
+                }
+
+                System.err.println("Unhandled Controller Exception: " + realCrash.getMessage());
+                realCrash.printStackTrace();
+
                 resp.setStatus(500);
-                resp.getWriter().print("Internal Server Error " + e);
+                resp.setContentType("application/json");
+                resp.getWriter().print("{\"error\": \"Internal Server Error\"}");
             }
 
         } else{

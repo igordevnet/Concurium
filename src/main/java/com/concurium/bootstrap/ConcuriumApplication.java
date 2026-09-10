@@ -57,6 +57,7 @@ public class ConcuriumApplication {
 
         var routes = httpScanner(applicationContext, reflection);
         var filterChain = loadFilterChain(applicationContext, reflection);
+        var exceptionRegistry = loadExceptionHandlers(applicationContext, reflection);
 
         Tomcat tomcatServer = new Tomcat();
         tomcatServer.setPort(serverPort);
@@ -64,7 +65,7 @@ public class ConcuriumApplication {
         tomcatServer.setBaseDir(new File(".").getAbsolutePath());
 
         var context = tomcatServer.addContext("", new File(".").getAbsolutePath());
-        Wrapper concServlet = tomcatServer.addServlet(context, "ConcServlet", new ConcServlet(routes, filterChain));
+        Wrapper concServlet = tomcatServer.addServlet(context, "ConcServlet", new ConcServlet(routes, filterChain, exceptionRegistry));
         context.addServletMappingDecoded("/*", "ConcServlet");
         log.info("Loaded {} routes into the registry", routes.size());
         log.info("Tomcat started on port 8080 in {} ms", (System.currentTimeMillis() - startTime));
